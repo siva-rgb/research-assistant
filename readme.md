@@ -265,7 +265,6 @@ The agent can perform:
 ---
 
 # Key Design Goals
-
 * Modular architecture
 * Scalable research workflows
 * Reliable retrieval orchestration
