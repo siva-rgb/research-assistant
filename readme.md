@@ -390,8 +390,17 @@ PINECONE_ENVIRONMENT=your_environment
 
 # Running the Project
 
+To test the execution
+ ```bash
+python scripts/run_agent.py "your question?" --verbose
+```
+To test the execution and view the verbose
 ```bash
-python main.py
+python scripts/run_agent.py "your question?" --verbose
+```
+To test the execution and get the streaming response
+```bash
+python scripts/run_agent.py "your question?" --verbose
 ```
 
 ---
