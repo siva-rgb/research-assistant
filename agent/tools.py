@@ -36,7 +36,7 @@ SEARCH_TIMEOUT_SECONDS= 10
 CONTENT_SNIPPET_MAX_CHARS=500
 DOCUMENT_MAX_CHARS=2000
 DOCUMENT_TIMEOUT_SECOND= 15
-
+MAX_MERGED_RESULTS=8
 # tools
 async def search_web(query:str)-> ToolResult:
     """Search Web using using tavily and return results.
@@ -381,7 +381,7 @@ def get_tool_decription_for_promt()->str:
 
 
 async def _search_with_strategy(query: str,
-                                intent:str,
+                                session_id:str,
                                 is_time_sensitive: bool=False):
     """
     Vector first search with confidence threshold fallback.
@@ -394,7 +394,8 @@ async def _search_with_strategy(query: str,
     Args:
         is_time_sensitive: If true, always run web search regradless of vectorstore coverage. Set by intent_node
     """
-    VS_SCORE_THRESHOLD= 0.82
+    start= time.monotonic()
+    VS_SCORE_THRESHOLD= 0.85
     VS_MIN_COUNT= 3
 
     vs_fn= get_tool("search_vectorstore")
@@ -411,11 +412,25 @@ async def _search_with_strategy(query: str,
     )
 
     if vs_sufficient:
-        logger.info(f"query={query} "
+        duration_ms= (time.monotonic()-start)*1000
+        logger.info(f"session_id= {session_id} "
+                    f"query={query} "
                     f"strategy= vectorstore_only "
                     f"hits={len(high_confidence_hits)} "
-                    f"top_score={high_confidence_hits[0]['score']:.3f}")
-        return high_confidence_hits
+                    f"top_score={high_confidence_hits[0]['score']:.3f}m "
+                    f"web_call= skipped "
+                    f"duration_ms= {duration_ms}"
+                    )
+
+        return sorted(high_confidence_hits,key=lambda r:r["score"],reverse=True)
+    
+    skip_reason= ("time_sensitive" if is_time_sensitive else f"low_vs_coverage_found (found={len(high_confidence_hits)}, need= {VS_MIN_COUNT})")
+
+    logger.info(f"session_id= {session_id} "
+                f"search_strategy= web_fallback "
+                f"query= {query} "
+                f"skip_reason= {skip_reason}"
+                f"vs_hits= {len(vs_hits)}")
     
     web_fn= get_tool("search_web")
     web_result= await web_fn(query)
@@ -423,6 +438,7 @@ async def _search_with_strategy(query: str,
     web_hits= web_result.get("data",[]) if web_result["success"] else []
 
     logger.info(
+        f"session_id= {session_id}"
         f"query={query} "
         f"strategy= web_search "
         f"vs_hits= {len(vs_hits)} "
@@ -433,13 +449,26 @@ async def _search_with_strategy(query: str,
     seen_urls: set[str]= set()
     merged: list[SearchReasult]=[]
 
-    for result_set in [vs_hits, web_hits]:
-        for r in result_set:
-            url= r.get("url", "")
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                merged.append(r)
-    
-    merged.sort(key=lambda r: r["score"], reverse=True)
+    all_results = vs_hits + web_hits
+    all_results.sort(key=lambda r: r.get("score", 0), reverse=True)
 
-    return merged[:8]
+    for r in all_results:
+        url= r.get("url","")
+        if not url or url not in seen_urls:
+            if url:
+                seen_urls.add(url)
+            merged.append(r)
+        if len(merged)>= MAX_MERGED_RESULTS:
+            break
+    
+    duration_ms= time.monotonic()-start
+    vs_in_merged= sum(1 for r in merged if r.get("source")=="vectorstore")
+    web_in_merged= sum(1 for r in merged if r.get("source")=="web")
+    logger.info(f"search_strategy= merged "
+                f"query={query} "
+                f"vs_in_merged={vs_in_merged} "
+                f"web_in_merged={web_in_merged} "
+                f"total= {len(merged)}"
+                f"duration_ms={duration_ms}")
+
+    return merged

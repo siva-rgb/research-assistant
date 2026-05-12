@@ -12,6 +12,7 @@ from agent.nodes import (
     synthesis_node,
     error_node,
     memory_update_node,
+    followup_node,
 )
 
 logger= logging.getLogger(__name__)
@@ -102,7 +103,7 @@ def build_graph()->StateGraph:
     graph.add_node("synthesis_node",synthesis_node)
     graph.add_node("memory_update_node", memory_update_node)
     graph.add_node("error_node",error_node)
-
+    graph.add_node("followup_node", followup_node)
     graph.set_entry_point("intent_node")
 
     # edges
@@ -150,7 +151,8 @@ def build_graph()->StateGraph:
     )
     
     # terminal nodes -> END
-    graph.add_edge("synthesis_node", "memory_update_node")
+    graph.add_edge("synthesis_node", "followup_node")
+    graph.add_edge("followup_node","memory_update_node")
     graph.add_edge("memory_update_node",END)
     graph.add_edge("error_node", END)
 

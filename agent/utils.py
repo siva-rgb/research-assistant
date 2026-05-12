@@ -50,7 +50,7 @@ async def refine_query(intent: str,
             intent= intent,
             subtask_description= subtask_description,
             planned_query= planned_query,
-            findings_summary= format_findings_summary(search_result=search_results)
+            finding_summary= format_findings_summary(search_result=search_results)
         ))]
         response= await invoke_llm(messages=message,
                                    temprature=0.4,

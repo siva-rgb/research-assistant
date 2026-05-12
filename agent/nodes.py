@@ -33,10 +33,11 @@ from agent.prompts import (SYSTEM_PROMPT,
                            QUERY_REFINEMENT_PROMPT,
                            REFLECTION_PROMPT,
                            SYNTHESIS_PROMPT,
+                           FOLLOWUP_PROMPT,
                            format_findings_for_prompt,
                            format_findings_summary)
 from agent.utils import refine_query, now_iso, parse_json_response
-from agent.tools import get_tool, get_tool_decription_for_promt
+from agent.tools import get_tool, get_tool_decription_for_promt, _search_with_strategy
 from agent.llm import invoke_llm
 import time
 logger= logging.getLogger(__name__)
@@ -143,6 +144,7 @@ async def intent_node(state: ResearchAgentState)-> dict:
                         ],
             "node_metrics":[metrics],
             "updated_at": now_iso(),
+            "is_time_sensistive": parsed["is_time_sensitive"]
         }
     except Exception as e:
         logger.error(f"[intent_node] Unexpected error: {e}")
@@ -259,7 +261,7 @@ async def executor_node(state: ResearchAgentState)->dict:
     sid= _sid(state)
     step_idx= state["current_step"]
     iteration= state['execution_iteration_count']
-
+    is_time_sensitive= state.get("is_time_sensitive",False)
 
     # sefty check for iteration limit
     if iteration >= settings.max_search_iteration:
@@ -305,38 +307,39 @@ async def executor_node(state: ResearchAgentState)->dict:
             search_results=state["search_results"]
         )
 
-        web_fn= get_tool("search_web")
-        vs_fn= get_tool("search_vectorstore")
+        results= await _search_with_strategy(query=query,session_id= sid, is_time_sensitive=is_time_sensitive)
+        # web_fn= get_tool("search_web")
+        # vs_fn= get_tool("search_vectorstore")
 
-        web_result, vs_result= await asyncio.gather(web_fn(query), vs_fn(query))
+        # web_result, vs_result= await asyncio.gather(web_fn(query), vs_fn(query))
 
         # merge result duplicarte by URL preserve source tag
 
-        seen_urls: set[str]= set()
-        merged: list[SearchReasult]= []
+        # seen_urls: set[str]= set()
+        # merged: list[SearchReasult]= []
 
-        for result_set in [vs_result, web_result]:
-            if result_set["success"]:
-                for r in result_set["data"]:
-                    url= r.get("url","")
-                    if url and url not in seen_urls:
-                        seen_urls.add(url)
-                        merged.append(r)
-        merged.sort(key=lambda r: r["score"], reverse=True)
-        merged= merged[:8]
+        # for result_set in [vs_result, web_result]:
+        #     if result_set["success"]:
+        #         for r in result_set["data"]:
+        #             url= r.get("url","")
+        #             if url and url not in seen_urls:
+        #                 seen_urls.add(url)
+        #                 merged.append(r)
+        # merged.sort(key=lambda r: r["score"], reverse=True)
+        # merged= merged[:8]
 
-        if merged:
-            updates["search_results"]= merged
+        if results:
+            updates["search_results"]= results
 
-            logger.info(f"session_id= {sid} node= executor_node"
+            logger.info(f"session_id= {sid} node= executor_node "
                         f"step={step_idx} "
-                        f"web_results= {len(web_result.get('data', []))} "
-                        f"vector_results= {len(vs_result.get('data',[]))} "
-                        f"merged= {len(merged)}"
-                        f"duration_ms={(time.monotonic()-start)*1000:.0f}")
+                        f"search_result_added= {len(results)} "
+                        f"cummulative= {len(state['search_results']) + len(results)} "
+                        f"duration_ms={(time.monotonic()-start)*1000:.0f} ")
         else:
             logger.warning(f"session_id= {sid} node= executor_node "
                            f"step={step_idx} no result from eighter source")
+            
     elif subtask["task_type"]== "read_document":
         read_fn= await read_fn(subtask["read_document"])
         result= await read_fn(subtask["query"])
@@ -601,7 +604,41 @@ async def synthesis_node(state:ResearchAgentState)->dict:
             "node_metrics":[metrics],
             "updated_at": now_iso(),
         }
+
+async def followup_node(state: ResearchAgentState):
+    """After the research agent generate the response create some followup question for the user to answer
+      try to write it from scratch"""
     
+    sid= _sid(state=state)
+    query= state.get("query","")
+    finding_summary= state.get("final_response","")
+    finding_summary= finding_summary[:500] if len(finding_summary)>500 else finding_summary
+
+    # form message
+    messages= [SystemMessage(content="You are a helpful research assistance"),
+               HumanMessage(content=FOLLOWUP_PROMPT.format(query=query,
+                                                           report_summary=finding_summary))]
+    
+    #call llm
+    try:
+
+        response= await invoke_llm(messages=messages, temprature=0.7, node_name="followup_node")
+        parsed= parse_json_response(response.content,"followup_node")
+
+        questions= parsed.get("questions",[])
+        questions= [q for q in questions if isinstance(q, str)][:3]
+    except Exception as e:
+        logger.warning(f"session_id= {sid} followup_node failed :{e}")
+        questions=[]
+
+    # logger.info(f"session_id= {sid} node= followup_node failed:{e}")
+    return{
+        "followup_questions": questions,
+        "updated_at": now_iso()
+    }
+
+
+
 async def error_node(state: ResearchAgentState)-> dict:
     """
     Terminal node fir unrecoverable errors.

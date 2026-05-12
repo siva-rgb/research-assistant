@@ -119,7 +119,7 @@ class ResearchAgentState(TypedDict):
     """The final synthesize research report ready to diliver to the user"""
     final_response: str
     node_metrics: Annotated[list[NodeMetrics],operator.add]
-
+    followup_questions: list[str]
     """set to true when the agent reaches a terminal state 
     successful synthesis, reflection abort, or unrecoverable error"""
     is_complete: bool
@@ -158,6 +158,7 @@ def create_itital_state(query:str, session_id:str)-> ResearchAgentState:
         reflection_iteration_count=0,
         final_response="",
         node_metrics=[],
+        followup_questions=[],
         is_complete=False,
         is_time_sensitive=False,
         error="",

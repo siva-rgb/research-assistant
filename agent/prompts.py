@@ -24,12 +24,16 @@ Respons with a JSON object and nothing else - no markdoen, no explanation:
 "research_scope": "<one of: Narrow | Moderate | Broad>",
 "key_concepts": ["<concept1>", "<concept2>", "..."]
 "reasoing": "<one sentence explaining your scope classification>"
+"is_time_sensitive": true or false,
 }}
 
 Scope defination:
 -Narrow: a specific factual question with a definative answer (1-2 search needed)
 -Moderate: a topic requiring multiple resource and some synthesis (3-5 searches)
 -broad: a complex topic requiring deep research and extensive synthesis (5+ searches)
+Time Sensitiveness:
+-True: If the user query has time factor like date month duration etc, if question required latest inforamtion or data from a specific time period
+-False: Otherwise
 
 """
 
@@ -121,6 +125,20 @@ Cite sources inline using [Source: url] format.
 Be factual. Do not add inforamtion beyond what findings contain.
 Taget lengtrh:300-600 words
 """
+
+FOLLOWUP_PROMPT= """
+Based on this research report and the original query, suggest exactly 3 follow-up question the user might want to explore next.
+Original query: {query}
+Report Summary: {report_summary}
+
+Respond with a with JSON objects only:
+{{"questions": ["<question 1>", "<question 2>", "<question 3>"]}}
+Rules:
+- Each question should go deeper or broder than the original query.
+- Question should be researchable (not opinion-based)
+- keep each question under 15 word.
+"""
+
 
 def format_findings_for_prompt(
         search_results: list[dict],
