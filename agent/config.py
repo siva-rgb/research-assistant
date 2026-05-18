@@ -4,10 +4,10 @@ import logging
 import logging.config
 class Settings(BaseSettings):
     model_api_key: str
-    openai_base_url:str="https://models.github.ai/inference"
-    openai_model: str="openai/gpt-4o"
+    openai_base_url:str="https://genai-sharedservice-americas.pwc.com/"
+    openai_model: str="azure.gpt-4.1"
     embedding_api_key: str
-    embedding_model: str= "openai/text-embedding-3-small"
+    embedding_model: str= "azure.text-embedding-3-small"
     openai_max_retries: int=2
     openai_request_timeout: int=30
     vector_store_collection:str ="research_findings"

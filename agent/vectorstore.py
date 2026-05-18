@@ -28,7 +28,7 @@ def _get_embeddings()->OpenAIEmbeddings:
     text-embeddign-small: 1536 dimession, fast, cheap """
     return OpenAIEmbeddings(api_key=settings.embedding_api_key,
                                  base_url=settings.openai_base_url,
-                                 model="openai/text-embedding-3-small",
+                                 model="azure.text-embedding-3-small",
                                  dimensions=512
                                  )
 
