@@ -4,7 +4,7 @@ import logging
 import logging.config
 class Settings(BaseSettings):
     model_api_key: str
-    openai_base_url:str=""
+    openai_base_url:str="" # add your base url here
     openai_model: str="azure.gpt-4.1"
     embedding_api_key: str
     embedding_model: str= "azure.text-embedding-3-small"
